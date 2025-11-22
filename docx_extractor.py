@@ -1,7 +1,7 @@
 import os
 import tempfile
 import pandas as pd
-from zipfile import ZipFile
+from zipfile import ZipFile, BadZipFile
 import xml.etree.ElementTree as ET
 
 namespaces = {
@@ -26,13 +26,16 @@ def get_xml_root(docx_path: str) -> ET.Element:
     tmpdir = tempfile.mkdtemp()
 
     # Manipulate strings to format paths
-    filename = docx_path[docx_path.rfind("\\")+1:-5]
-    xml_subpath = f"{filename}/word/document.xml"
+    xml_subpath = f"word/document.xml"
     doc_xml_path = f"{tmpdir}/{xml_subpath}"
 
     # Extract just the document.xml file
+    # try:
     with ZipFile(docx_path, 'r') as zObject:
         zObject.extractall(tmpdir, members=[xml_subpath])
+    # except BadZipFile as e:
+    #     print(f"File: {tmpdir[tmpdir.rfind('\\'):]} cannot be extracted due to error:\n{e}")
+    #     return
 
     # Parse document.xml
     tree = ET.parse(doc_xml_path)
@@ -43,7 +46,7 @@ def get_xml_root(docx_path: str) -> ET.Element:
 
 # Extract data from tables
 # =======================
-def get_tabular_data(docx_path: str) -> pd.DataFrame:
+def get_tabular_data(docx_path: str, combine_frames: bool = True) -> pd.DataFrame:
     """ Locate all data from any tables in the document.
         This wll usually be: 
             Name of Insured «Text»
@@ -51,14 +54,10 @@ def get_tabular_data(docx_path: str) -> pd.DataFrame:
             Type of incident, «Categorical Text»
             Location, «ISO 3166 Alpha-2 Code»
             Industry, «SIC Alphabetic Industry Class» 
-            Args:
-            docx_path (str): Path to a .docx file
             
     Args:
         docx_path (str): Path to a .docx file
-        
-    Returns:
-        pd.DataFrame: Table featuring 
+        combine_frames (bool): If True then all tables are concatenated into a single dataframe
     """
     root = get_xml_root(docx_path)
     tables = []
@@ -80,8 +79,11 @@ def get_tabular_data(docx_path: str) -> pd.DataFrame:
         df = pd.DataFrame(rows)
         tables.append(df)
 
-    # Combine tables and return
-    return pd.concat(tables)
+    if combine_frames:
+        # Combine tables and return
+        return pd.concat(tables)
+    else:
+        return tables
 
 
 # Extract text data
