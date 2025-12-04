@@ -3,3 +3,5 @@ data
 !data\SIC_alphabetic_classifications.csv
 !data\ISO_3166-1_alpha2_country_codes.csv
 .vscode
+testing.ipynb
+*.csv

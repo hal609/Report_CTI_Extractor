@@ -3,6 +3,7 @@ import tempfile
 import pandas as pd
 from zipfile import ZipFile, BadZipFile
 import xml.etree.ElementTree as ET
+from pretty_warnings import warn
 
 namespaces = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -11,7 +12,7 @@ namespaces = {
 
 # Read document.xml
 # =================
-def get_xml_root(docx_path: str) -> ET.Element:
+def get_xml_root(docx_path: str) -> ET.Element|None:
     """ Extracts and reads the document.xml file from a docx and returns
         The root of the XML tree as a xml ElementTree Element.
 
@@ -30,12 +31,13 @@ def get_xml_root(docx_path: str) -> ET.Element:
     doc_xml_path = f"{tmpdir}/{xml_subpath}"
 
     # Extract just the document.xml file
-    # try:
-    with ZipFile(docx_path, 'r') as zObject:
-        zObject.extractall(tmpdir, members=[xml_subpath])
-    # except BadZipFile as e:
-    #     print(f"File: {tmpdir[tmpdir.rfind('\\'):]} cannot be extracted due to error:\n{e}")
-    #     return
+    try:
+        with ZipFile(docx_path, 'r') as zObject:
+            zObject.extractall(tmpdir, members=[xml_subpath])
+    except Exception as e:
+        warn(f"File: {docx_path[docx_path.rfind('\\'):]} cannot be extracted. {e}")
+        # print(f"File: {tmpdir[tmpdir.rfind('\\'):]} cannot be extracted due to error:\n{e}")
+        return None
 
     # Parse document.xml
     tree = ET.parse(doc_xml_path)
@@ -60,6 +62,10 @@ def get_tabular_data(docx_path: str, combine_frames: bool = True) -> pd.DataFram
         combine_frames (bool): If True then all tables are concatenated into a single dataframe
     """
     root = get_xml_root(docx_path)
+    
+    if root is None:
+        return pd.DataFrame(columns=[0, 1]) if combine_frames else []
+    
     tables = []
 
     # Find all tables
@@ -74,14 +80,21 @@ def get_tabular_data(docx_path: str, combine_frames: bool = True) -> pd.DataFram
                 cells.append(cell_text)
 
             rows.append(cells)
-
+        
         # Convert to DataFrame
         df = pd.DataFrame(rows)
+        
+        # Ensure at least two columns
+        if df.shape[1] < 2:
+            df = df.reindex(columns=range(2), fill_value="")
+        
         tables.append(df)
 
+    if len(tables) == 0: return tables
+    
     if combine_frames:
         # Combine tables and return
-        return pd.concat(tables)
+        return pd.concat(tables, ignore_index=True)
     else:
         return tables
 
